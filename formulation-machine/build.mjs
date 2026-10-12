@@ -11,7 +11,8 @@ import * as G from "../kit/lathe.mjs";
 import { tubePieces, tubeSvg } from "../kit/tube.mjs";
 import * as A from "../kit/audit.mjs";
 import { kitScript } from "../scripts/inline-kit.mjs";
-import { CANDIDATES } from "./model.mjs";
+import * as M from "./model.mjs";
+const { CANDIDATES } = M;
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -175,7 +176,7 @@ function tabletSvg(kind, cx, cy, z, { scale = 1, lit = false } = {}) {
   const ring = kind === 0 ? Ln(k.ring(cx, cy, r * 0.36, T.top, P, 24), { tone: "lo" }) : "";
   return { svg: S(paths, { tone: "hi", crease: "lo", lit }) + score + ring, shape: A.solid(T.F, T.profile), top: T.top };
 }
-const KIND_CLASS = ["fm-white", "fm-teal", "fm-blue"];
+const KIND_CLASS = ["fm-white", "fm-teal", "fm-blue", "fm-reject"];
 
 // ---------------------------------------------------------------- deck and bed (static, back layer)
 
@@ -212,7 +213,7 @@ record(A.slab(BED, 0, BZ, { name: "stand.bed", ground: true }, 6));
 
 const MODULE_Y = [-108, -64, -20, 24, 68];
 const MOD = { x0: -322, x1: -250, half: 19, top: 9 };
-const MODULE_NAMES = ["MARKET", "KNOWLEDGE", "gRIS", "PROCESS", "COGS"];
+const MODULE_NAMES = ["BFoM", "KNOWLEDGE", "gRIS", "MFG DATA", "COGS"];
 const HEADER = { x0: -240, x1: -224, y0: -132, y1: 88, z0: 4, z1: 34 };
 const PORT_Z = 20;
 
@@ -732,8 +733,8 @@ PEDESTALS.forEach(([px, py], i) => {
   pipe(`chute${i}`, [a, b], 2.6, { cls: "fm-teal" });
 });
 // Label plates between each pedestal and the gate, reading along the row.
-const OUT_NAMES = ["LOWEST COST", "DIFFERENTIATION", "MANUFACTURABILITY"];
-const OUT_SPAN = [[-79, -41], [-13, 37], [39, 95]];
+const OUT_NAMES = ["COST LEADERSHIP", "DIFFERENTIATION", "MFG EXCELLENCE"];
+const OUT_SPAN = [[-86, -36], [-13, 37], [41, 91]];
 PEDESTALS.forEach((_, i) => {
   const [ya, yb] = OUT_SPAN[i];
   const plate = { x: 312, y: ya, w: 12, d: yb - ya, r: 1.2 };
@@ -745,14 +746,14 @@ PEDESTALS.forEach((_, i) => {
   });
 });
 // Station label plates on the bed in front of the conveyor.
-STATION_NAMES.slice(0, 5).forEach((name, i) => {
-  const x = STATION_X[i];
-  const plate = { x: x - 30, y: 39, w: 60, d: 12, r: 1.2 };
+[...STATION_NAMES.slice(0, 5), "CONSTRAINTS"].forEach((name, i) => {
+  const x = i < 5 ? STATION_X[i] : 186;
+  const plate = { x: x - (i < 5 ? 30 : 26), y: 39, w: i < 5 ? 60 : 52, d: 12, r: 1.2 };
   box(`label.${name}`, [plate.x, plate.y, BZ], [plate.x + plate.w, plate.y + plate.d, BZ + 1.2], { tone: "lo" }, {
     r: 1,
     steps: 2,
     bevel: 0,
-    extra: label(onTop(x, plate.y + 8.4, BZ + 1.2), name, 6.6) + screwsOnTop([[plate.x + 2.4, plate.y + 4.5], [plate.x + plate.w - 2.4, plate.y + 4.5]], BZ + 1.2, 0.4),
+    extra: label(onTop(x, plate.y + 8.4, BZ + 1.2), name, i < 5 ? 6.6 : 6) + screwsOnTop([[plate.x + 2.4, plate.y + 4.5], [plate.x + plate.w - 2.4, plate.y + 4.5]], BZ + 1.2, 0.4),
   });
 });
 
@@ -778,7 +779,7 @@ const GATE = { x: 340, y0: -96, y1: 72, z: 96 };
   });
 }
 // The human console at the front corner: three buttons and a selector lever in a slot.
-const CONSOLE = { x0: 192, x1: 232, y0: 64, y1: 86, z: 22 };
+const CONSOLE = { x0: 242, x1: 276, y0: 70, y1: 92, z: 22 };
 {
   const { x0, x1, y0, y1, z } = CONSOLE;
   box("console.body", [x0, y0, 0], [x1, y1, z], { tone: "mid" }, {
@@ -786,12 +787,48 @@ const CONSOLE = { x0: 192, x1: 232, y0: 64, y1: 86, z: 22 };
     bevel: 0.8,
     extra:
       Ln(k.planOutline({ x: x0 + 3, y: y0 + 11, w: x1 - x0 - 6, d: y1 - y0 - 14, r: 1.5 }, z, P, 3), { tone: "faint" }) +
-      label(onFront((x0 + x1) / 2, y1 + 0.05, 10), "HUMAN", 6),
+      label(onFront((x0 + x1) / 2, y1 + 0.05, 10), "HUMAN", 5.6),
   });
   box("console.slot", [x0 + 5, y0 + 4, z], [x1 - 5, y0 + 7, z + 0.4], { tone: "lo" }, { r: 1.2, steps: 2, bevel: 0 });
   [0, 1, 2].forEach((i) => {
-    const bx = x0 + 9 + i * 10;
+    const bx = x0 + 7 + i * 10;
     cyl(`console.button${i}`, bx, y0 + 14, 3, z, z + 2, { tone: "hi" }, { cls: KIND_CLASS[i] === "fm-white" ? "" : KIND_CLASS[i], bevel: 0.3 });
+  });
+}
+
+// The constraint gate: seven checkpoints over the belt, one per constraint, and a reject
+// chute over the front rail into a bin. Rejected candidates leave the line here.
+const CG = { x0: 166, x1: 212, y0: 1, y1: 36, z: 46 };
+{
+  const { x0, x1, y0, y1, z } = CG;
+  [x0, x1].forEach((x, i) => {
+    [y0, y1].forEach((y, j) => box(`cg.post${i}${j}`, [x - 2, y - 2, BZ], [x + 2, y + 2, z], { tone: "mid" }, { r: 0.6 }));
+    box(`cg.cross${i}`, [x - 2.5, y0 - 2.5, z], [x + 2.5, y1 + 2.5, z + 4], { tone: "mid" }, { r: 0.8 });
+  });
+  box("cg.beam", [x0 - 2.5, 15, z + 4], [x1 + 2.5, 23, z + 8], { tone: "mid" }, { r: 1, bevel: 0.5, cls: "fm-blue" });
+  M.CONSTRAINTS.forEach((_, i) => {
+    const x = x0 + 6 + i * ((x1 - x0 - 12) / 6);
+    cyl(`cg.head${i}`, x, 19, 2.2, z - 6, z + 4, { tone: "hi" }, { extra: `<g class="fm-gate-led" data-gate="${i}">${ledRow([[x, 21.25, z - 2.5]], { delay: i * 260 })}</g>` });
+  });
+  // Reject chute resting on the front rail, sloping down to the bin.
+  const from = [224, 30.2, 27.6];
+  const to = [224, 66, 13.6];
+  const dir = G.unit3(G.sub3(to, from));
+  const CF = G.frameOf(from, dir, [1, 0, 0], G.unit3(G.cross3(dir, [1, 0, 0])));
+  const len = G.len3(G.sub3(to, from));
+  const poly = [[-4.5, -0.6], [4.5, -0.6], [4.5, 0.6], [-4.5, 0.6]];
+  const shape = record(A.prism(CF, poly, 0, len, { name: "reject.chute" }));
+  put("reject.chute", G.add3(from, G.mul3(dir, len / 2)), S(G.prismOf(CF, poly, 0, len, P), { tone: "mid" }), [shape], { cls: "fm-reject" });
+  const bin = { x: 208, y: 62, w: 30, d: 26, r: 2 };
+  box("reject.bin", [bin.x, bin.y, 0], [bin.x + bin.w, bin.y + bin.d, 13], { tone: "mid" }, {
+    r: 2,
+    bevel: 0.6,
+    cls: "fm-reject",
+    extra: Ln(k.planOutline(k.insetPlan(bin, 2.2), 13, P, 3), { tone: "lo" }),
+  });
+  [[216, 71], [229, 77], [218, 81.5]].forEach(([x, y], i) => {
+    const T = tabletSvg(0, x, y, 13, { scale: 0.5 });
+    put(`reject.tab${i}`, [x, y, 14], T.svg, [record({ ...T.shape, name: `reject.tab${i}` })], { cls: "fm-reject-tab" });
   });
 }
 
@@ -803,11 +840,12 @@ const indexOf = (name) => R.items.findIndex((item) => item.name === name);
 
 // Live parts drawn in reserved slots of the settled order.
 const BELT_X = { from: -24, to: 236 };
-const TAB_COUNT = 9;
+const TAB_KINDS = [0, 3, 1, 2, 3, 0, 1, 3, 2, 3];
+const TAB_COUNT = TAB_KINDS.length;
 const tabletsOnBelt = Array.from({ length: TAB_COUNT }, (_, i) => {
-  const kind = i % 3;
+  const kind = TAB_KINDS[i];
   const T = tabletSvg(kind, 0, 19, CONV.z, { scale: 0.5 });
-  return `<g class="${KIND_CLASS[kind]}" data-tab="${i}" data-kind="${kind}">${T.svg}</g>`;
+  return `<g class="${KIND_CLASS[kind]}${kind === 3 ? " fm-reject-tab" : ""}" data-tab="${i}" data-kind="${kind}">${T.svg}</g>`;
 }).join("");
 
 const picker = (() => {
@@ -841,18 +879,28 @@ const gateCarriage = (() => {
 
 const slots = new Map();
 const addSlot = (index, svg) => slots.set(index, (slots.get(index) ?? "") + svg);
-addSlot(indexOf("conv.belt"), `<g data-part="tablets">${tabletsOnBelt}</g>`);
-addSlot(indexOf("retr.beam"), `<g data-part="picker">${picker}</g>`);
+addSlot(indexOf("conv.belt"), `<g data-part="tablets" data-step="generate evaluate">${tabletsOnBelt}</g>`);
+addSlot(indexOf("retr.beam"), `<g data-part="picker" data-step="evidence" data-road="developing" data-trace="">${picker}</g>`);
 addSlot(
   Math.max(...PEDESTALS.map((_, i) => indexOf(`ped${i}.tablet`)), indexOf("gate.beam")),
-  `<g data-part="carriage">${gateCarriage}</g>`,
+  `<g data-part="carriage" data-step="decide" data-trace="">${gateCarriage}</g>`,
 );
-addSlot(indexOf("sort.cap"), `<path data-part="flap" class="iso-line" data-tone="hi" data-free="start" style="stroke-width:1.6" d=""/>`);
-addSlot(indexOf("console.slot"), `<g data-part="lever"></g>`);
-addSlot(indexOf("bench.dial"), `<path data-part="bench-needle" class="iso-line" data-tone="lit" data-free="start" style="stroke-width:1" d=""/>`);
-addSlot(indexOf("cost.body"), `<g data-part="cost-needle" transform="${onFront(COST.dial[0], COST.dial[1] + 0.1, COST.dial[2])}"><path class="iso-line" data-tone="lit" data-free="end" style="stroke-width:1.1" d="M0 2.4L0 -9.6"/><circle class="fm-hub" r="1.1"/></g>`);
+addSlot(indexOf("sort.cap"), `<g data-step="decide"><path data-part="flap" class="iso-line" data-tone="hi" data-free="start" style="stroke-width:1.6" d=""/></g>`);
+addSlot(indexOf("console.slot"), `<g data-part="lever" data-step="decide" data-trace=""></g>`);
+addSlot(indexOf("bench.dial"), `<g data-step="evidence" data-road="existing" data-trace=""><path data-part="bench-needle" class="iso-line" data-tone="lit" data-free="start" style="stroke-width:1" d=""/></g>`);
+addSlot(indexOf("cost.body"), `<g data-part="cost-needle" data-step="evaluate" transform="${onFront(COST.dial[0], COST.dial[1] + 0.1, COST.dial[2])}"><path class="iso-line" data-tone="lit" data-free="end" style="stroke-width:1.1" d="M0 2.4L0 -9.6"/><circle class="fm-hub" r="1.1"/></g>`);
 
-const groups = R.items.map((item, index) => `<g class="it${item.cls ? ` ${item.cls}` : ""}" data-name="${item.name}"${item.attrs ?? ""}>${item.svg}</g>${slots.get(index) ?? ""}`);
+// Tag every drawn item with its story step, whether it carries the evidence trail, and
+// the roadmap maturity of the capability it belongs to (from model.mjs).
+const LABEL_PART = { BENCHMARK: "bench", RETRIEVAL: "retr", GENERATION: "gen", SIMULATION: "sim", COST: "cost", CONSTRAINTS: "cg" };
+const has = (name, prefixes) => prefixes.some((p) => name.startsWith(p));
+function tagsOf(name) {
+  const as = name.startsWith("label.") ? LABEL_PART[name.slice(6)] ?? name : name;
+  const steps = M.STEPS.filter((step) => has(as, step.parts)).map((step) => step.key);
+  const level = M.ROADMAP.find((r) => has(as, r.parts))?.level;
+  return `${steps.length ? ` data-step="${steps.join(" ")}"` : ""}${has(as, M.TRACE_PARTS) ? ' data-trace=""' : ""}${level ? ` data-road="${level}"` : ""}`;
+}
+const groups = R.items.map((item, index) => `<g class="it${item.cls ? ` ${item.cls}` : ""}" data-name="${item.name}"${tagsOf(item.name)}${item.attrs ?? ""}>${item.svg}</g>${slots.get(index) ?? ""}`);
 
 const LABEL_TEXT =
   "An isometric formulation decision machine. Five input modules on the left (global market formulations, internal development knowledge, gRIS project data, manufacturing process and equipment data, COGS and economic data) feed a header. A pipe climbs the back portal into a tablet press, and further pipes, a conveyor and an evidence bus join six stations: benchmarking, retrieval, candidate generation, manufacturing simulation, cost scoring and traceability. A sorter sends three tablet concepts (lowest cost, differentiation, manufacturability) to three pedestals, and a human decision gate selects one.";
@@ -862,10 +910,11 @@ const svg = k.figureSvg({ width: W, height: H, label: LABEL_TEXT, body: [...back
 const DATA = {
   P,
   candidates: CANDIDATES,
+  steps: M.STEPS.map(({ key, title, detail }) => ({ key, title, detail })),
   pedestals: PEDESTALS.map(([x, y]) => [x, y, PED_TOP]),
   sorter: { c: SORT.c, z: 31, r: 9 },
   gate: { restY: PEDESTALS[1][1] },
-  belt: { from: BELT_X.from, to: BELT_X.to, count: TAB_COUNT },
+  belt: { from: BELT_X.from, to: BELT_X.to, count: TAB_COUNT, reject: [CG.x1, 224] },
   picker: { rest: PICK.rest, range: [-108, -80] },
   bench: { c: BENCH.dial, top: BENCH.dialZ + 6 },
   console: CONSOLE,
@@ -874,15 +923,74 @@ const DATA = {
 const CSS = readFileSync(join(HERE, "machine.css"), "utf8");
 const LIVE = readFileSync(join(HERE, "live.js"), "utf8").replace("__DATA__", JSON.stringify(DATA));
 
+const esc = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const pips = (n, cls = "") => `<span class="fm-pips${cls}" role="img" aria-label="${n} of 5">${[1, 2, 3, 4, 5].map((i) => `<i${i <= n ? " data-on" : ""}></i>`).join("")}</span>`;
+const sel = CANDIDATES[1];
+const maxRejected = Math.max(...M.CONSTRAINTS.map((c) => c.rejected));
+const survivors = M.GENERATED - M.CONSTRAINTS.reduce((a, c) => a + c.rejected, 0);
+
+const header = `<header class="fm-head">
+  <p class="fm-kicker">Formulation decision support</p>
+  <h1>${esc(M.QUESTION)}</h1>
+  <ol class="fm-steps" aria-label="The decision in four steps">${M.STEPS.map((step, i) => `<li><button type="button" data-step-button="${step.key}" aria-pressed="false"><b>${i + 1}</b><span>${esc(step.title)}</span></button></li>`).join("")}</ol>
+  <p class="fm-step-detail" data-step-detail aria-live="polite">Press a step to see which part of the machine does it, or play the story.</p>
+</header>`;
+
+const toolbar = `<div class="fm-toolbar" role="toolbar" aria-label="Views">
+  <div class="fm-seg" role="group" aria-label="View">${[["machine", "Machine"], ["trace", "Traceability"], ["road", "Roadmap"]].map(([key, title], i) => `<button type="button" data-mode-button="${key}" aria-pressed="${i === 0}">${title}</button>`).join("")}</div>
+  <button type="button" class="fm-play" data-play>▶ Play the story</button>
+  <div class="fm-seg" role="group" aria-label="Candidate">${CANDIDATES.map((c, i) => `<button type="button" data-cand-button="${i}" aria-pressed="${i === 1}"><b>${c.key}</b> ${esc(c.short)}</button>`).join("")}</div>
+</div>`;
+
+const legend = `<div class="fm-legend" data-legend="machine"><span><i class="fm-key fm-key-data"></i>Data</span><span><i class="fm-key fm-key-sim"></i>Processing and simulation</span><span><i class="fm-key fm-key-decision"></i>Decision</span><span><i class="fm-key fm-key-reject"></i>Rejection</span></div>
+<div class="fm-legend" data-legend="road">${M.ROADMAP.map((r) => `<span><i class="fm-key fm-road-${r.level}"></i><b>${esc(r.title)}</b>&nbsp;${r.items.map(esc).join(", ")}</span>`).join("")}</div>
+<div class="fm-legend" data-legend="trace"><span><i class="fm-key fm-key-trace"></i>Evidence trail: every source, gate and decision is recorded by TRACE and linked to the recommendation</span></div>`;
+
+const comparison = `<section class="fm-card fm-compare" aria-labelledby="fm-compare-h">
+  <h2 id="fm-compare-h">Compare the three options</h2>
+  <table><thead><tr><th scope="col"><span class="fm-sr">Criterion</span></th>${CANDIDATES.map((c, i) => `<th scope="col" data-col="${i}"><b>${c.key}</b><span>${esc(c.short)}</span></th>`).join("")}</tr></thead>
+  <tbody>${M.CRITERIA.map(([key, title]) => `<tr><th scope="row">${esc(title)}${key === "risk" ? " <small>lower is better</small>" : ""}</th>${CANDIDATES.map((c, i) => `<td data-col="${i}">${pips(c.scores[key], key === "risk" ? " fm-pips-risk" : "")}</td>`).join("")}</tr>`).join("")}</tbody></table>
+</section>`;
+
+const confidence = `<section class="fm-card fm-confidence" aria-labelledby="fm-conf-h">
+  <h2 id="fm-conf-h">Option <span data-c="key">${sel.key}</span> · <span data-c="name">${esc(sel.name)}</span></h2>
+  <p class="fm-pitch" data-c="pitch">${esc(sel.pitch)}</p>
+  <dl>
+    <div><dt>Source</dt><dd data-c="source">${esc(sel.confidence.source)}</dd></div>
+    <div><dt>Refresh date</dt><dd data-c="refreshed">${esc(sel.confidence.refreshed)}</dd></div>
+    <div><dt>Coverage</dt><dd><span class="fm-bar"><i data-c="coverage-bar" style="width:${sel.confidence.coverage * 100}%"></i></span><span data-c="coverage">${Math.round(sel.confidence.coverage * 100)} %</span></dd></div>
+    <div><dt>Confidence</dt><dd data-c="level">${esc(sel.confidence.level)}</dd></div>
+    <div><dt>Traceability</dt><dd><span data-c="links">${sel.confidence.links}</span> linked evidence records</dd></div>
+  </dl>
+  <p class="fm-accountable">${esc(M.ACCOUNTABILITY)}</p>
+</section>`;
+
+const constraints = `<section class="fm-card fm-constraints" aria-labelledby="fm-cons-h">
+  <h2 id="fm-cons-h">Why options are rejected</h2>
+  <p class="fm-funnel"><b>${M.GENERATED}</b> generated <span aria-hidden="true">→</span> <b>${survivors}</b> pass all seven gates</p>
+  <ol>${M.CONSTRAINTS.map((c, i) => `<li data-gate-row="${i}"><span class="fm-gate-dot"></span><span>${esc(c.title)}</span><span class="fm-bar fm-bar-reject"><i style="width:${(c.rejected / maxRejected) * 100}%"></i></span><span class="fm-num">${c.rejected}</span></li>`).join("")}</ol>
+</section>`;
+
+const scenario = `<section class="fm-card fm-scenario" aria-labelledby="fm-scen-h">
+  <h2 id="fm-scen-h">${esc(M.SCENARIO.title)}</h2>
+  <p>${esc(M.SCENARIO.brief)}</p>
+  <dl>${M.SCENARIO.facts.map(([term, value]) => `<div><dt>${esc(term)}</dt><dd>${esc(value)}</dd></div>`).join("")}</dl>
+</section>`;
+
 const body =
   `<style>${CSS}</style>` +
+  header +
   k.plateHtml({
     fig: "Fig 1",
     title: "Formulation decision machine",
-    hint: "Hover a candidate · 1 2 3",
-    readout: CANDIDATES[1].readout,
-    body: `<div class="iso-stage fm-stage" tabindex="0" role="radiogroup" aria-label="Formulation decision machine. Press 1, 2 or 3, or the arrow keys, to choose the candidate the decision gate selects.">${svg}<span class="fm-sr" role="status" aria-live="polite" data-status></span></div>`,
-  });
+    hint: "Hover a candidate · 1 2 3 · T trace · R roadmap",
+    readout: sel.readout,
+    body: `<div class="iso-stage fm-stage" data-mode="machine" tabindex="0" role="radiogroup" aria-label="Formulation decision machine. Press 1, 2 or 3, or the arrow keys, to choose the option the decision gate selects. T shows the evidence trail, R the roadmap.">${svg}<span class="fm-sr" role="status" aria-live="polite" data-status></span></div>`,
+  }) +
+  toolbar +
+  legend +
+  `<div class="fm-panels">${confidence}${comparison}${constraints}${scenario}</div>` +
+  `<p class="fm-note">All scores, counts, dates and confidence values are illustrative placeholders. Replace them in model.mjs with live BFoM, gRIS and COGS data.</p>`;
 
 const page = k.pageHtml({ title: "Formulation decision machine", theme: "light", body, script: kitScript() + LIVE, width: 1240 });
 writeFileSync(join(HERE, "formulation-machine.html"), page);

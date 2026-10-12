@@ -7,12 +7,32 @@ An interactive isometric illustration for an executive presentation, built with 
 
 Open `formulation-machine/formulation-machine.html` in a browser. It is one self-contained page with no dependencies.
 
-- **Five input modules** (MARKET, KNOWLEDGE, gRIS, PROCESS, COGS) each feed the intake header through their own pipe.
-- **Six stations** are joined by pipes, a conveyor and an evidence bus: BENCHMARK, RETRIEVAL, GENERATION, SIMULATION, COST and TRACE.
-- **Three tablet concepts** leave the sorter: lowest cost (white round), differentiation (turquoise oval) and manufacturability (blue scored round).
-- **The human decision gate** selects one. Hover a pedestal, click it, or press `1` `2` `3` / the arrow keys. When idle, the machine tours the three candidates.
+The page leads with the business question and a four-step story: **Evidence → Alternative generation → Evaluation → Human decision**. Press a step, or **Play the story**, and the machine spotlights the parts that do that step.
 
-The dial positions in `formulation-machine/model.mjs` are illustrative, qualitative scores, not data.
+**In the drawing** (short labels only):
+- **Evidence sources:** BFoM, KNOWLEDGE, gRIS, MFG DATA and COGS feed the intake header.
+- **Stations:** BENCHMARK, RETRIEVAL, GENERATION (a tablet press), SIMULATION and COST.
+- **CONSTRAINTS:** seven checkpoints over the belt. Rejected options (shown in coral) leave down a chute into a reject bin.
+- **TRACE:** the evidence recorder, on a bus that runs behind every station.
+- **Outputs:** three strategic options on pedestals: Cost leadership, Differentiation and Mfg excellence.
+- **The human decision gate:** an overhead carriage and lamp, plus a HUMAN console.
+
+**Colours:** data is blue, processing and simulation are turquoise, decisions are navy, and rejections are coral.
+
+**Views:**
+- **Machine:** the full drawing.
+- **Traceability** (`T`): only the evidence trail.
+- **Roadmap** (`R`): existing capabilities glow blue, those in development glow turquoise, and the future vision is greyed.
+
+**Panels below the figure:**
+- the selected option, with confidence indicators (source, refresh date, coverage, confidence, traceability) and the accountability statement
+- a comparison of the three options
+- why options are rejected, gate by gate
+- an example scenario (a high drug-load oral tablet)
+
+Choose an option by hovering a pedestal, clicking an option button, or pressing `1` `2` `3` or the arrow keys.
+
+**All scores, counts, dates and confidence values are illustrative placeholders.** They all live in `formulation-machine/model.mjs`, including which drawn parts belong to each story step and each roadmap level. Edit that file and rebuild.
 
 ## Rebuild
 

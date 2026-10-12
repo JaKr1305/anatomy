@@ -46,7 +46,68 @@ function select(i, announce = true) {
   const text = DATA.candidates[i].readout;
   if (readout.textContent !== text) readout.textContent = text;
   stage.setAttribute("aria-valuetext", `Candidate ${DATA.candidates[i].key}: ${DATA.candidates[i].name}`);
-  if (announce) status.textContent = `Candidate ${DATA.candidates[i].key}, ${DATA.candidates[i].name}, selected at the decision gate`;
+  if (announce) status.textContent = `Option ${DATA.candidates[i].key}, ${DATA.candidates[i].name}, selected at the decision gate`;
+  const c = DATA.candidates[i];
+  const fill = { key: c.key, name: c.name, pitch: c.pitch, source: c.confidence.source, refreshed: c.confidence.refreshed, coverage: `${Math.round(c.confidence.coverage * 100)} %`, level: c.confidence.level, links: c.confidence.links };
+  for (const [key, value] of Object.entries(fill)) document.querySelectorAll(`[data-c="${key}"]`).forEach((el) => (el.textContent = value));
+  document.querySelectorAll('[data-c="coverage-bar"]').forEach((el) => (el.style.width = `${c.confidence.coverage * 100}%`));
+  document.querySelectorAll(".fm-compare [data-col]").forEach((el) => el.toggleAttribute("data-on", el.dataset.col === String(i)));
+  document.querySelectorAll("[data-cand-button]").forEach((el) => el.setAttribute("aria-pressed", String(el.dataset.candButton === String(i))));
+}
+
+// Views and the story. A step spotlights the parts of the machine that do it; a mode
+// shows the evidence trail or the roadmap maturity of each capability.
+const stepDetail = document.querySelector("[data-step-detail]");
+const stepDefault = stepDetail.textContent;
+const playButton = document.querySelector("[data-play]");
+let story = null;
+function focusStep(key) {
+  if (key) stage.dataset.focus = key;
+  else delete stage.dataset.focus;
+  document.querySelectorAll("[data-step-button]").forEach((el) => el.setAttribute("aria-pressed", String(el.dataset.stepButton === key)));
+  const step = DATA.steps.find((s) => s.key === key);
+  stepDetail.textContent = step ? `${DATA.steps.indexOf(step) + 1} · ${step.title}: ${step.detail}` : stepDefault;
+}
+function setMode(mode) {
+  stage.dataset.mode = mode;
+  document.querySelectorAll("[data-mode-button]").forEach((el) => el.setAttribute("aria-pressed", String(el.dataset.modeButton === mode)));
+}
+function stopStory() {
+  clearTimeout(story);
+  story = null;
+  playButton.setAttribute("aria-pressed", "false");
+  playButton.textContent = "▶ Play the story";
+}
+function playStory(index = 0) {
+  if (index >= DATA.steps.length) {
+    stopStory();
+    focusStep(null);
+    return;
+  }
+  playButton.setAttribute("aria-pressed", "true");
+  playButton.textContent = "■ Stop";
+  focusStep(DATA.steps[index].key);
+  if (DATA.steps[index].key === "decide") choose(state.sel);
+  story = setTimeout(() => playStory(index + 1), still.matches ? 6000 : 4200);
+}
+document.querySelectorAll("[data-step-button]").forEach((el) =>
+  el.addEventListener("click", () => {
+    stopStory();
+    focusStep(stage.dataset.focus === el.dataset.stepButton ? null : el.dataset.stepButton);
+  }),
+);
+document.querySelectorAll("[data-mode-button]").forEach((el) => el.addEventListener("click", () => setMode(el.dataset.modeButton)));
+document.querySelectorAll("[data-cand-button]").forEach((el) => el.addEventListener("click", () => choose(Number(el.dataset.candButton))));
+playButton.addEventListener("click", () => (story ? (stopStory(), focusStep(null)) : playStory(0)));
+
+// The constraint list follows the gate heads: one gate lights at a time as tablets pass.
+const gateRows = [...document.querySelectorAll("[data-gate-row]")];
+let gateLit = -1;
+function lightGate(t) {
+  const i = still.matches ? -1 : Math.floor(t / 0.9) % gateRows.length;
+  if (i === gateLit) return;
+  gateLit = i;
+  gateRows.forEach((row, j) => row.toggleAttribute("data-on", j === i));
 }
 
 function draw() {
@@ -65,7 +126,9 @@ function draw() {
   tablets.forEach((el, i) => {
     const u = (((state.belt + i * gap) % span) + span) % span;
     const x = DATA.belt.from + u;
-    const fade = Math.min(1, u / 14, (span - u) / 14);
+    let fade = Math.min(1, u / 14, (span - u) / 14);
+    // Rejected candidates leave the belt at the end of the constraint gate, down the reject chute.
+    if (el.dataset.kind === "3") fade = Math.min(fade, Math.max(0, (DATA.belt.reject[1] - x) / (DATA.belt.reject[1] - DATA.belt.reject[0])));
     el.setAttribute("transform", translateAlong(P, [x, 0, 0]));
     el.setAttribute("opacity", Math.max(0, fade).toFixed(3));
   });
@@ -93,6 +156,7 @@ function tick(now) {
     state.pick = ease(state.pick, want, dt, 0.6);
   }
   draw();
+  lightGate(now / 1000);
   frame = visible && !still.matches ? requestAnimationFrame(tick) : 0;
 }
 
@@ -150,6 +214,18 @@ stage.addEventListener("click", (event) => {
 stage.addEventListener("keydown", (event) => {
   let to = null;
   if (["1", "2", "3"].includes(event.key)) to = Number(event.key) - 1;
+  const mode = { t: "trace", T: "trace", r: "road", R: "road", m: "machine", M: "machine" }[event.key];
+  if (mode) {
+    event.preventDefault();
+    setMode(stage.dataset.mode === mode ? "machine" : mode);
+    return;
+  }
+  if (event.key === "Escape") {
+    stopStory();
+    focusStep(null);
+    setMode("machine");
+    return;
+  }
   if (event.key === "ArrowRight" || event.key === "ArrowDown") to = (state.sel + 1) % 3;
   if (event.key === "ArrowLeft" || event.key === "ArrowUp") to = (state.sel + 2) % 3;
   if (to === null) return;
